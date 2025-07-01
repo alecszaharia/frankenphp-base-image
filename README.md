@@ -37,3 +37,5 @@ RUN set -eux; \
 	chmod +x bin/console; sync;
 
 ```
+
+Make sure you appllication is compatible with FrankenPHP by following the [FrankenPHP documentation](https://frankenphp.dev/docs/).
