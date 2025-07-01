@@ -2,15 +2,12 @@
 
 # Adapted from https://github.com/dunglas/symfony-docker
 
-
 # Versions
 FROM dunglas/frankenphp:1-php8.4 AS frankenphp_upstream
-
 
 # The different stages of this Dockerfile are meant to be built into separate images
 # https://docs.docker.com/develop/develop-images/multistage-build/#stop-at-a-specific-build-stage
 # https://docs.docker.com/compose/compose-file/#target
-
 
 # Base FrankenPHP image
 FROM frankenphp_upstream AS frankenphp_base
@@ -19,36 +16,38 @@ WORKDIR /app
 
 # persistent / runtime deps
 # hadolint ignore=DL3008
-RUN apt-get update && apt-get install --no-install-recommends -y \
-	acl \
-	file \
-	gettext \
-	git \
-    libmemcached-dev \
-    libmemcached11 \
-    zlib1g-dev \
-    libzip-dev \
-    libfreetype6-dev  \
-    libjpeg62-turbo-dev \
-    libmcrypt-dev \
-    libpng-dev \
-    libicu-dev \
-    libpq-dev \
-    libonig-dev \
-    libssl-dev \
-	&& rm -rf /var/lib/apt/lists/* && apt-get clean
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y \
+        acl \
+        file \
+        gettext \
+        git \
+        libmemcached-dev \
+        libmemcached11 \
+        zlib1g-dev \
+        libzip-dev \
+        libfreetype6-dev \
+        libjpeg62-turbo-dev \
+        libmcrypt-dev \
+        libpng-dev \
+        libicu-dev \
+        libpq-dev \
+        libonig-dev \
+        libssl-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
 ENV COMPOSER_ALLOW_SUPERUSER=1
 
 ENV PHP_INI_SCAN_DIR=":$PHP_INI_DIR/app.conf.d"
 
 RUN set -eux; \
-	install-php-extensions \
-		@composer \
-		apcu \
-		intl \
-		opcache \
-		zip \
+    install-php-extensions \
+        @composer \
+        apcu \
+        intl \
+        opcache \
+        zip \
         gd \
         iconv \
         mbstring \
@@ -56,8 +55,7 @@ RUN set -eux; \
         pdo_pgsql \
         pdo_mysql \
         amqp \
-        memcached \
-	;
+        memcached
 
 COPY --link frankenphp/conf.d/10-app.ini $PHP_INI_DIR/app.conf.d/
 COPY --link --chmod=755 frankenphp/docker-entrypoint.sh /usr/local/bin/docker-entrypoint
@@ -81,9 +79,8 @@ RUN mv "$PHP_INI_DIR/php.ini-development" "$PHP_INI_DIR/php.ini"
 ARG XDEBUG_VERSION=3.4.4
 
 RUN set -eux; \
-	install-php-extensions \
-		xdebug-${XDEBUG_VERSION} \
-	;
+    install-php-extensions \
+        xdebug-${XDEBUG_VERSION}
 
 COPY --link frankenphp/conf.d/20-app.dev.ini $PHP_INI_DIR/app.conf.d/
 
