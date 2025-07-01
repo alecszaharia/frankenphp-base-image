@@ -27,7 +27,6 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     libmemcached-dev \
     libmemcached11 \
     zlib1g-dev \
-    libssl-dev \
     libzip-dev \
     libfreetype6-dev  \
     libjpeg62-turbo-dev \
@@ -37,7 +36,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     libpq-dev \
     libonig-dev \
     libssl-dev \
-	&& rm -rf /var/lib/apt/lists/*
+	&& rm -rf /var/lib/apt/lists/* && apt-get clean
 
 ENV COMPOSER_ALLOW_SUPERUSER=1
 
@@ -98,7 +97,3 @@ ENV APP_ENV=prod
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
 COPY --link frankenphp/conf.d/20-app.prod.ini $PHP_INI_DIR/app.conf.d/
-
-# copy sources
-RUN rm -Rf frankenphp/
-
