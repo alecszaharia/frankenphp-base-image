@@ -1,0 +1,182 @@
+name: Tests
+
+on:
+  pull_request:
+  release:
+    types: [published]
+
+env:
+  DATABASE_URL: mysql://root:test@runner_mysql/brizy_api?serverVersion=8
+  REVISIONS_DATABASE_URL: mysql://root:test@runner_mysql/brizy_api_revisions?serverVersion=8
+  OAUTH2_KEY_PASSPHRASE: ~
+
+jobs:
+  symfony:
+    name: Symfony (PHP ${{ matrix.php-versions }})
+    runs-on: self-hosted
+    if: ${{ github.event_name == 'pull_request'  }}
+    strategy:
+      matrix:
+        php-versions:
+          - '7.4'
+    steps:
+      - name: Clean cache Cachge/Git folders
+        run: rm -rf var/cache/* && rm -rf .git/hooks/*
+
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - id: files
+        name: Gettings modifiled files
+        uses: jitterbit/get-changed-files@v1
+
+      - name: Setup PHP with composer and extensions
+        uses: shivammathur/setup-php@v2 # https://github.com/shivammathur/setup-php
+        with:
+          php-version: ${{ matrix.php-versions }}
+          extensions: mbstring, xml, ctype, iconv, intl, pdo_sqlite, mysql, amqp
+        env:
+          runner: self-hosted
+
+      - name: Get composer cache directory
+        id: composer-cache
+        run: echo "::set-output name=dir::$(composer config cache-files-dir)"
+
+      - uses: actions/cache@v3
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: Validate composer
+        run: composer validate
+
+      - name: Generate OAuth private/public keys
+        run: |
+          openssl genrsa -out oauth.pem 1024
+          openssl rsa -in oauth.pem -pubout > oauth.pub
+          echo "OAUTH2_PRIVATE_KEY_PATH=$(realpath oauth.pem)" >> $GITHUB_ENV
+          echo "OAUTH2_PUBLIC_KEY_PATH=$(realpath oauth.pub)" >> $GITHUB_ENV
+
+      - name: Install composer dependencies
+        run: >-
+          composer install
+          --no-progress
+          --no-suggest
+          --prefer-dist
+          --no-scripts
+          --optimize-autoloader
+
+      - name: Require PHP CS fixer format
+        run: >-
+          vendor/bin/php-cs-fixer fix
+          --dry-run
+          --diff
+          --ansi
+          --allow-risky=yes
+          --stop-on-violation
+          --config .php-cs-fixer.dist.php
+          ${{ steps.files.outputs.added_modified }}
+
+      - name: Prepare phpunit # prevent install logs pollute the "Run tests" step
+        run: bin/phpunit --version
+
+      - name: Prepare DB
+        run: env RUN_CMS_MIGRATIONS=1 bin/reset-database
+
+      - name: Run tests
+        run: ./vendor/bin/phpunit
+
+  push_to_registry:
+    name: Push Docker images to Docker Hub
+    if: ${{ github.event_name == 'release'  }}
+    runs-on: self-hosted
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v3
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: br1zy/api
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+
+      - name: Set App Version
+        run: sed -i 's|APP_VERSION=.*|APP_VERSION=${{ steps.meta.outputs.version }}|' .env
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          target: production
+          cache-from: type=registry,ref=br1zy/api:latest
+          cache-to: type=inline
+
+  create_fixes_branch:
+    name: Create new fixes branch
+    needs: push_to_registry
+    if: ${{ github.event_name == 'release'  }}
+    runs-on: self-hosted
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v2
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v3
+        with:
+          images: br1zy/api
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+      - name: Create and push the fixes branch
+        run: |
+          git checkout -b fixes-${{ steps.meta.outputs.version }}
+          git push origin fixes-${{ steps.meta.outputs.version }}
+
+  deploy:
+    name: "Deploy to staging"
+    runs-on: self-hosted
+    if: ${{ github.event_name == 'release'  }}
+    needs: push_to_registry
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh/
+          echo "$SSH_KEY" > ~/.ssh/staging.key
+          chmod 600 ~/.ssh/staging.key
+          cat >>~/.ssh/config <<END
+          Host staging
+            HostName $SSH_HOST
+            User $SSH_USER
+            IdentityFile ~/.ssh/staging.key
+            StrictHostKeyChecking no
+          END
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: br1zy/api
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+
+      - name: Stop the server
+        run: ssh staging 'cd ~/brizy-k8s/ && ./bin/deploy-new-image.sh staging brizy-api ${{ steps.meta.outputs.version }}'
