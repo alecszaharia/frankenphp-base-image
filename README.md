@@ -9,11 +9,13 @@ This repository provides a base Docker image for Symfony applications using [Fra
 
 ### 1. Create a `Dockerfile` in Your Project Root
 
-### 2. Build the Base Image
+### 2. Build the Base Image using the target you need: frankenphp_dev or frankenphp_prod
 
 ```
-docker build -t brizy-frankenphp-prod -target={frankenphp_dev|frankenphp_prod} .
+docker build -t brizy-frankenphp-prod -target=frankenphp_prod .
 ```
+
+### 3. Use the Base Image in Your Dockerfile
 
 #### Example `Dockerfile`
 
@@ -40,4 +42,3 @@ RUN set -eux; \
 ## Notes
 
 - Ensure your application is compatible with FrankenPHP by following the [FrankenPHP documentation](https://frankenphp.dev/docs/).
-- Adjust the Dockerfile as needed for your specific project requirements.
