@@ -1,21 +1,19 @@
 # Brizy FrankenPHP Base Image
 
-This repository provides a base Docker image for PHP applications using [FrankenPHP](https://frankenphp.dev/).
+This repository provides a base Docker image for Symfony applications using [FrankenPHP](https://frankenphp.dev/).
 
 ## Available Image Tags
 
 - **`brizy-frankenphp-prod`**: Production-ready base image for FrankenPHP.
 - **`brizy-frankenphp-dev`**: Development-ready base image for FrankenPHP (includes additional tools and configurations for development).
 
-
 ### 1. Create a `Dockerfile` in Your Project Root
 
-### 2. Choose a Base Image Stage
+### 2. Build the Base Image
 
-You can use one of the following stages as your base image:
-
-- `brizy-frankenphp-prod` (production)
-- `brizy-frankenphp-dev` (development)
+```
+docker build -t brizy-frankenphp-prod -target={frankenphp_dev|frankenphp_prod} .
+```
 
 #### Example `Dockerfile`
 
